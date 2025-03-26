@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/ulog"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
@@ -77,6 +78,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("failed to find an available destination").AtWarning().Base(err)
 	}
 	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", server.Destination().NetAddr())
+	ulog.LogConnection(ctx, destination, conn)
 
 	defer conn.Close()
 

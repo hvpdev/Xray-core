@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/singbridge"
+	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -79,6 +80,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	network := destination.Network
 
 	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", o.server.NetAddr())
+	ulog.LogConnection(ctx, destination, nil)
 
 	serverDestination := o.server
 	if o.uotClient != nil {

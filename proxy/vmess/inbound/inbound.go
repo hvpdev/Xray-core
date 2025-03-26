@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
@@ -267,6 +268,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	errors.LogInfo(ctx, "received request for ", request.Destination())
+	ulog.LogConnection(ctx, request.Destination(), connection)
 
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
 		errors.LogInfoInner(ctx, err, "unable to set back read deadline")

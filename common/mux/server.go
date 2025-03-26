@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
@@ -122,6 +123,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 	// (Target and OriginalTarget)
 	ctx = session.ContextCloneOutboundsAndContent(ctx)
 	errors.LogInfo(ctx, "received request for ", meta.Target)
+	ulog.LogConnection(ctx, meta.Target, nil)
 	{
 		msg := &log.AccessMessage{
 			To:     meta.Target,
