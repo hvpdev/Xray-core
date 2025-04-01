@@ -60,9 +60,15 @@ func (l *Logger) Close() {
 
 func (l *Logger) LogConnectionRaw(ts time.Time, params ConnectionParams) {
 	l.mu.RLock()
-	l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d P=%s",
-		ts.Format("01-02:15:04:05"), params.SrcIP, params.SrcPort, params.DstIP,
-		params.DstPort, params.Protocol)
+	if params.DstName != "" {
+		l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d N=%s P=%s",
+			ts.Format("01-02:15:04:05"), params.SrcIP, params.SrcPort, params.DstIP,
+			params.DstPort, params.DstName, params.Protocol)
+	} else {
+		l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d P=%s",
+			ts.Format("01-02:15:04:05"), params.SrcIP, params.SrcPort, params.DstIP,
+			params.DstPort, params.Protocol)
+	}
 	l.mu.RUnlock()
 }
 
@@ -73,9 +79,31 @@ func (l *Logger) LogConnection(ctx context.Context, dest net.Destination, conn s
 	}
 
 	params := ConnectionParams{
-		DstIP:    dest.Address.String(),
 		DstPort:  uint16(dest.Port),
 		Protocol: protocol,
+	}
+
+	if dest.Address.Family().IsDomain() {
+		params.DstName = dest.Address.Domain()
+		if outbounds := session.OutboundsFromContext(ctx); len(outbounds) > 0 {
+			ob := outbounds[len(outbounds)-1]
+			if ob.Target.IsValid() && ob.Target.Address.Family().IsIP() {
+				params.DstIP = ob.Target.Address.IP().String()
+			}
+		}
+
+		if params.DstIP == "" && conn != nil {
+			if addr := conn.RemoteAddr(); addr != nil {
+				switch addr := addr.(type) {
+				case *net.TCPAddr:
+					params.DstIP = addr.IP.String()
+				case *net.UDPAddr:
+					params.DstIP = addr.IP.String()
+				}
+			}
+		}
+	} else {
+		params.DstIP = dest.Address.IP().String()
 	}
 
 	inbound := session.InboundFromContext(ctx)
@@ -129,6 +157,7 @@ type ConnectionParams struct {
 	SrcPort  uint16
 	DstIP    string
 	DstPort  uint16
+	DstName  string
 	Protocol string
 }
 
