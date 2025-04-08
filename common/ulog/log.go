@@ -1,13 +1,18 @@
 package ulog
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -17,10 +22,16 @@ import (
 var Log *Logger = New(context.Background())
 
 const (
-	logDir     = "/var/log"
-	maxSize    = 1024 // 1 GB
-	maxAge     = 1    // 1 day
-	maxBackups = 2
+	logDir      = "/var/log"
+	logFileBase = "xray-conn"
+	maxSize     = 1024 // 1 GB
+	maxAge      = 3    // 3 days
+	maxBackups  = 5
+)
+
+var (
+	logFile = logFileBase + ".log"
+	curFile = filepath.Join(logDir, logFile)
 )
 
 func LogConnectionRaw(ts time.Time, params ConnectionParams) {
@@ -35,18 +46,21 @@ type Logger struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	mu     sync.RWMutex
-	log    *log.Logger
+
+	log       *log.Logger
+	startTime time.Time
 }
 
 func New(ctx context.Context) *Logger {
 	ctx, cancel := context.WithCancel(ctx)
 
 	l := &Logger{
-		ctx:    ctx,
-		cancel: cancel,
-		log:    log.New(newLumberjackLogger(), "", 0),
+		ctx:       ctx,
+		cancel:    cancel,
+		log:       log.New(newLumberjackLogger(), "", 0),
+		startTime: getStartTime(),
 	}
-	l.runDailyRotationLoop()
+	l.runRotationLoop()
 	return l
 }
 
@@ -126,30 +140,60 @@ func (l *Logger) LogConnection(ctx context.Context, dest net.Destination, conn s
 	l.LogConnectionRaw(time.Now(), params)
 }
 
-func (l *Logger) calcNewDayDiff() time.Duration {
-	now := time.Now()
-	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
-	return tomorrow.Sub(now)
-}
-
-func (l *Logger) runDailyRotationLoop() {
+func (l *Logger) runRotationLoop() {
 	go func() {
 		for {
 			select {
 			case <-l.ctx.Done():
 				return
-			case <-time.After(l.calcNewDayDiff()):
+			case <-time.After(time.Minute):
+				time.Sleep(l.calcRotationSleepTime())
 				l.rotate()
-				time.Sleep(time.Minute)
 			}
 		}
 	}()
 }
 
+func (l *Logger) calcRotationSleepTime() time.Duration {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	return 24*time.Hour - time.Since(l.startTime)
+}
+
 func (l *Logger) rotate() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	l.startTime = time.Now()
+	l.log.Writer().(*lumberjack.Logger).Close()
+
+	// Remove oldest file
+	os.Remove(filepath.Join(logDir, fmt.Sprintf("%s.%d.gz", logFileBase, maxAge-1)))
+
+	// Rename files
+	for i := maxAge - 2; i > 0; i-- {
+		src := filepath.Join(logDir, fmt.Sprintf("%s.%d.gz", logFileBase, i))
+		dst := filepath.Join(logDir, fmt.Sprintf("%s.%d.gz", logFileBase, i+1))
+		os.Rename(src, dst)
+	}
+
+	// Compress current file
+	if _, err := os.Stat(curFile); err == nil {
+		cmd := exec.Command("gzip", "-c", curFile)
+		out, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s.1.gz", logFileBase)))
+		if err != nil {
+			os.Rename(curFile, filepath.Join(logDir, fmt.Sprintf("%s.1.log", logFileBase)))
+		} else {
+			cmd.Stdout = out
+			cmd.Run()
+			out.Close()
+			os.Remove(curFile)
+		}
+	}
+
 	l.log.SetOutput(newLumberjackLogger())
+	logrus.Debug("[wgi-conn] Rotated log file")
 }
 
 type ConnectionParams struct {
@@ -161,16 +205,46 @@ type ConnectionParams struct {
 	Protocol string
 }
 
-func getLogFilename() string {
-	const logFilePattern = "xray-conn-%s.log"
-	return fmt.Sprintf(logFilePattern, time.Now().Format("2006-01-02"))
-}
-
 func newLumberjackLogger() *lumberjack.Logger {
 	return &lumberjack.Logger{
-		Filename:   filepath.Join(logDir, getLogFilename()),
+		Filename:   curFile,
 		MaxSize:    maxSize,
 		MaxAge:     maxAge,
 		MaxBackups: maxBackups,
+		Compress:   true,
 	}
+}
+
+func getStartTime() time.Time {
+	file, err := os.Open(curFile)
+	if err != nil {
+		return time.Now()
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	if scanner.Scan() {
+		if t := parseLogTime(scanner.Text()); t != nil {
+			return *t
+		}
+	}
+
+	return time.Now()
+}
+
+func parseLogTime(line string) *time.Time {
+	for _, part := range strings.Split(line, " ") {
+		if strings.HasPrefix(part, "T=") {
+			t, err := time.Parse("01-02:15:04:05", part[2:])
+			if err != nil {
+				return nil
+			}
+			now := time.Now()
+			t = time.Date(now.Year(), t.Month(), t.Day(), t.Hour(),
+				t.Minute(), t.Second(), 0, time.Local)
+			return &t
+		}
+	}
+
+	return nil
 }
