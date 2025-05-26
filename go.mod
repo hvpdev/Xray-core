@@ -4,10 +4,13 @@ go 1.24
 
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
+	github.com/cloudflare/ahocorasick v0.0.0-20240916140611-054963ec9396
 	github.com/cloudflare/circl v1.6.0
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
+	github.com/glenn-brown/golang-pkg-pcre v0.0.0-20120522223659-48bb82a8b8ce
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.7.0
+	github.com/google/gonids v0.0.0-20221214051315-c9bac16ccf6a
 	github.com/gorilla/websocket v1.5.3
 	github.com/miekg/dns v1.1.63
 	github.com/pelletier/go-toml v1.9.5

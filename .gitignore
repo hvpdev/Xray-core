@@ -31,3 +31,5 @@ errorgen
 
 # Output from dlv test
 **/debug.*
+
+rules/
