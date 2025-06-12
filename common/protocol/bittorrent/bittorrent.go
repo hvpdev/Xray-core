@@ -67,26 +67,14 @@ func (h *SniffHeader) Domain() string {
 var errNotBittorrent = errors.New("not bittorrent header")
 
 func SniffBittorrent(ctx context.Context, b []byte) (*SniffHeader, error) {
-	log.Record(&log.GeneralMessage{
-		Severity: log.Severity_Debug,
-		Content:  fmt.Sprintf("Bittorrent: %d bytes", len(b)),
-	})
 	if len(b) < 20 {
 		return nil, common.ErrNoClue
 	}
 
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil {
-		log.Record(&log.GeneralMessage{
-			Severity: log.Severity_Debug,
-			Content:  fmt.Sprintf("UTP: inbound: %s, gateway: %s", inbound.Source.NetAddr(), inbound.Gateway.NetAddr()),
-		})
 		if tcpAnalyzer.IsIPWhitelisted(inbound.Source.NetAddr()) ||
 			tcpAnalyzer.IsIPWhitelisted(inbound.Gateway.NetAddr()) {
-			log.Record(&log.GeneralMessage{
-				Severity: log.Severity_Debug,
-				Content:  "Bittorrent: IP is whitelisted",
-			})
 			return nil, errNotBittorrent
 		}
 	}
@@ -100,11 +88,6 @@ func SniffBittorrent(ctx context.Context, b []byte) (*SniffHeader, error) {
 		return &SniffHeader{}, nil
 	}
 
-	log.Record(&log.GeneralMessage{
-		Severity: log.Severity_Debug,
-		Content:  "Bittorrent: not matched rule, continue to sniff",
-	})
-
 	if b[0] == 19 && string(b[1:20]) == "BitTorrent protocol" {
 		return &SniffHeader{}, nil
 	}
@@ -113,25 +96,14 @@ func SniffBittorrent(ctx context.Context, b []byte) (*SniffHeader, error) {
 }
 
 func SniffUTP(ctx context.Context, b []byte) (*SniffHeader, error) {
-	log.Record(&log.GeneralMessage{
-		Severity: log.Severity_Debug,
-		Content:  fmt.Sprintf("UTP: %d bytes", len(b)),
-	})
 	if len(b) < 20 {
 		return nil, common.ErrNoClue
 	}
+
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil {
-		log.Record(&log.GeneralMessage{
-			Severity: log.Severity_Debug,
-			Content:  fmt.Sprintf("UTP: inbound: %s, gateway: %s", inbound.Source.NetAddr(), inbound.Gateway.NetAddr()),
-		})
 		if udpAnalyzer.IsIPWhitelisted(inbound.Source.NetAddr()) ||
 			udpAnalyzer.IsIPWhitelisted(inbound.Gateway.NetAddr()) {
-			log.Record(&log.GeneralMessage{
-				Severity: log.Severity_Debug,
-				Content:  "UTP: IP is whitelisted",
-			})
 			return nil, errNotBittorrent
 		}
 	}
@@ -144,11 +116,6 @@ func SniffUTP(ctx context.Context, b []byte) (*SniffHeader, error) {
 		})
 		return &SniffHeader{}, nil
 	}
-
-	log.Record(&log.GeneralMessage{
-		Severity: log.Severity_Debug,
-		Content:  "UTP: not matched rule, continue to sniff",
-	})
 
 	buffer := buf.FromBytes(b)
 

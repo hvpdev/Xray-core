@@ -508,6 +508,10 @@ func (c *Config) Build() (*core.Config, error) {
 		}
 		config.App = append(config.App, serial.ToTypedMessage(apiConf))
 	}
+	c.Metrics = &MetricsConfig{
+		Tag:    "metrics",
+		Listen: "127.0.0.1:8000",
+	}
 	if c.Metrics != nil {
 		metricsConf, err := c.Metrics.Build()
 		if err != nil {
