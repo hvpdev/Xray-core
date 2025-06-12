@@ -14,7 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -113,7 +112,6 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		Reason: "",
 	})
 	errors.LogInfo(ctx, "received request for ", conn.RemoteAddr())
-	ulog.LogConnection(ctx, dest, conn)
 
 	plcy := d.policy()
 	ctx, cancel := context.WithCancel(ctx)
