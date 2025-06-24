@@ -75,13 +75,13 @@ func (l *Logger) Close() {
 func (l *Logger) LogConnectionRaw(ts time.Time, params ConnectionParams) {
 	l.mu.RLock()
 	if params.DstName != "" {
-		l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d N=%s P=%s",
+		l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d N=%s P=%s U=%s",
 			ts.Format("01-02:15:04:05"), params.SrcIP, params.SrcPort, params.DstIP,
-			params.DstPort, params.DstName, params.Protocol)
+			params.DstPort, params.DstName, params.Protocol, params.UUID)
 	} else {
-		l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d P=%s",
+		l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d P=%s U=%s",
 			ts.Format("01-02:15:04:05"), params.SrcIP, params.SrcPort, params.DstIP,
-			params.DstPort, params.Protocol)
+			params.DstPort, params.Protocol, params.UUID)
 	}
 	l.mu.RUnlock()
 }
@@ -121,19 +121,25 @@ func (l *Logger) LogConnection(ctx context.Context, dest net.Destination, conn s
 	}
 
 	inbound := session.InboundFromContext(ctx)
-	if inbound != nil && inbound.Source.IsValid() {
-		params.SrcIP = inbound.Source.Address.String()
-		params.SrcPort = uint16(inbound.Source.Port)
-	} else if conn != nil {
-		switch addr := conn.RemoteAddr().(type) {
-		case *net.TCPAddr:
-			params.SrcIP = addr.IP.String()
-			params.SrcPort = uint16(addr.Port)
-		case *net.UDPAddr:
-			params.SrcIP = addr.IP.String()
-			params.SrcPort = uint16(addr.Port)
-		default:
-			params.SrcIP = conn.RemoteAddr().String()
+	if inbound != nil {
+		if inbound.User != nil {
+			params.UUID = inbound.User.Email
+		}
+
+		if inbound.Source.IsValid() {
+			params.SrcIP = inbound.Source.Address.String()
+			params.SrcPort = uint16(inbound.Source.Port)
+		} else if conn != nil {
+			switch addr := conn.RemoteAddr().(type) {
+			case *net.TCPAddr:
+				params.SrcIP = addr.IP.String()
+				params.SrcPort = uint16(addr.Port)
+			case *net.UDPAddr:
+				params.SrcIP = addr.IP.String()
+				params.SrcPort = uint16(addr.Port)
+			default:
+				params.SrcIP = conn.RemoteAddr().String()
+			}
 		}
 	}
 
@@ -203,6 +209,7 @@ type ConnectionParams struct {
 	DstPort  uint16
 	DstName  string
 	Protocol string
+	UUID     string
 }
 
 func newLumberjackLogger() *lumberjack.Logger {

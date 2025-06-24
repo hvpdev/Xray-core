@@ -18,7 +18,6 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
@@ -98,7 +97,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination().NetAddr())
-	ulog.LogConnection(ctx, target, conn)
 
 	command := protocol.RequestCommandTCP
 	if target.Network == net.Network_UDP {

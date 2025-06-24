@@ -446,7 +446,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		errors.LogWarningInner(ctx, err, "unable to set back read deadline")
 	}
 	errors.LogInfo(ctx, "received request for ", request.Destination())
-	ulog.LogConnection(ctx, request.Destination(), connection)
 
 	inbound := session.InboundFromContext(ctx)
 	if inbound == nil {
@@ -454,6 +453,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	inbound.Name = "vless"
 	inbound.User = request.User
+
+	ulog.LogConnection(ctx, request.Destination(), connection)
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
