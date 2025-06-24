@@ -13,6 +13,8 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/stats"
 )
 
 const (
@@ -54,6 +56,21 @@ func init() {
 	newAnalyzer(true)
 }
 
+func getStatManager(ctx context.Context) stats.Manager {
+	v := core.MustFromContext(ctx)
+	return v.GetFeature(stats.ManagerType()).(stats.Manager)
+}
+
+func incStat(ctx context.Context, uuid string) {
+	if uuid == "" {
+		return
+	}
+	statsManager := getStatManager(ctx)
+	name := "bittorrent_" + uuid
+	c, _ := stats.GetOrRegisterCounter(statsManager, name)
+	c.Add(1)
+}
+
 type SniffHeader struct{}
 
 func (h *SniffHeader) Protocol() string {
@@ -71,12 +88,14 @@ func SniffBittorrent(ctx context.Context, b []byte) (*SniffHeader, error) {
 		return nil, common.ErrNoClue
 	}
 
+	var uuid string
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil {
 		if tcpAnalyzer.IsIPWhitelisted(inbound.Source.NetAddr()) ||
 			tcpAnalyzer.IsIPWhitelisted(inbound.Gateway.NetAddr()) {
 			return nil, errNotBittorrent
 		}
+		uuid = inbound.User.Email
 	}
 
 	ok, rule := tcpAnalyzer.Match(b)
@@ -85,10 +104,12 @@ func SniffBittorrent(ctx context.Context, b []byte) (*SniffHeader, error) {
 			Severity: log.Severity_Debug,
 			Content:  fmt.Sprintf("Bittorrent: matched rule: %s", rule),
 		})
+		incStat(ctx, uuid)
 		return &SniffHeader{}, nil
 	}
 
 	if b[0] == 19 && string(b[1:20]) == "BitTorrent protocol" {
+		incStat(ctx, uuid)
 		return &SniffHeader{}, nil
 	}
 
@@ -100,12 +121,14 @@ func SniffUTP(ctx context.Context, b []byte) (*SniffHeader, error) {
 		return nil, common.ErrNoClue
 	}
 
+	var uuid string
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil {
 		if udpAnalyzer.IsIPWhitelisted(inbound.Source.NetAddr()) ||
 			udpAnalyzer.IsIPWhitelisted(inbound.Gateway.NetAddr()) {
 			return nil, errNotBittorrent
 		}
+		uuid = inbound.User.Email
 	}
 
 	ok, rule := udpAnalyzer.Match(b)
@@ -114,6 +137,7 @@ func SniffUTP(ctx context.Context, b []byte) (*SniffHeader, error) {
 			Severity: log.Severity_Debug,
 			Content:  fmt.Sprintf("UTP: matched rule: %s", rule),
 		})
+		incStat(ctx, uuid)
 		return &SniffHeader{}, nil
 	}
 
@@ -164,5 +188,6 @@ func SniffUTP(ctx context.Context, b []byte) (*SniffHeader, error) {
 		return nil, errNotBittorrent
 	}
 
+	incStat(ctx, uuid)
 	return &SniffHeader{}, nil
 }
