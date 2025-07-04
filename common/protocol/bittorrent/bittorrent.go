@@ -66,7 +66,7 @@ func incStat(ctx context.Context, uuid string) {
 		return
 	}
 	statsManager := getStatManager(ctx)
-	name := "bittorrent_" + uuid
+	name := fmt.Sprintf("user>>>%s>>>traffic>>>torrent", uuid)
 	c, _ := stats.GetOrRegisterCounter(statsManager, name)
 	c.Add(1)
 }
