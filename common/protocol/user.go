@@ -29,9 +29,11 @@ func (u *User) ToMemoryUser() (*MemoryUser, error) {
 		return nil, err
 	}
 	return &MemoryUser{
-		Account: account,
-		Email:   u.Email,
-		Level:   u.Level,
+		Account:   account,
+		Email:     u.Email,
+		Level:     u.Level,
+		RateLimit: u.RateLimit,
+		RateBurst: u.RateBurst,
 	}, nil
 }
 
@@ -40,16 +42,20 @@ func ToProtoUser(mu *MemoryUser) *User {
 		return nil
 	}
 	return &User{
-		Account: serial.ToTypedMessage(mu.Account.ToProto()),
-		Email:   mu.Email,
-		Level:   mu.Level,
+		Account:   serial.ToTypedMessage(mu.Account.ToProto()),
+		Email:     mu.Email,
+		Level:     mu.Level,
+		RateLimit: mu.RateLimit,
+		RateBurst: mu.RateBurst,
 	}
 }
 
 // MemoryUser is a parsed form of User, to reduce number of parsing of Account proto.
 type MemoryUser struct {
 	// Account is the parsed account of the protocol.
-	Account Account
-	Email   string
-	Level   uint32
+	Account    Account
+	Email      string
+	Level      uint32
+	RateLimit uint64 // bytes per second, 0 = no limit
+	RateBurst uint64 // bytes, 0 = default (= RateLimit)
 }

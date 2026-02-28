@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
+	"golang.org/x/time/rate"
 )
 
 var errSniffingTimeout = errors.New("timeout on sniffing")
@@ -94,12 +95,13 @@ func (r *cachedReader) Interrupt() {
 
 // DefaultDispatcher is a default implementation of Dispatcher.
 type DefaultDispatcher struct {
-	ohm    outbound.Manager
-	router routing.Router
-	policy policy.Manager
-	stats  stats.Manager
-	dns    dns.Client
-	fdns   dns.FakeDNSEngine
+	ohm          outbound.Manager
+	router       routing.Router
+	policy       policy.Manager
+	stats        stats.Manager
+	dns          dns.Client
+	fdns         dns.FakeDNSEngine
+	rateLimiters sync.Map // email -> *rate.Limiter
 }
 
 func init() {
@@ -193,9 +195,35 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 
 			}
 		}
+
+		if user.RateLimit > 0 {
+			burst := int(user.RateBurst)
+			if burst == 0 {
+				burst = int(user.RateLimit)
+			}
+			limiter := d.getOrCreateLimiter(user.Email, rate.Limit(user.RateLimit), burst)
+			inboundLink.Writer = &RateLimitWriter{Writer: inboundLink.Writer, Limiter: limiter}
+			outboundLink.Writer = &RateLimitWriter{Writer: outboundLink.Writer, Limiter: limiter}
+		} else {
+			d.rateLimiters.Delete(user.Email)
+		}
 	}
 
 	return inboundLink, outboundLink
+}
+
+func (d *DefaultDispatcher) getOrCreateLimiter(email string, limit rate.Limit, burst int) *rate.Limiter {
+	if v, ok := d.rateLimiters.Load(email); ok {
+		l := v.(*rate.Limiter)
+		if l.Limit() != limit || l.Burst() != burst {
+			l.SetLimit(limit)
+			l.SetBurst(burst)
+		}
+		return l
+	}
+	l := rate.NewLimiter(limit, burst)
+	actual, _ := d.rateLimiters.LoadOrStore(email, l)
+	return actual.(*rate.Limiter)
 }
 
 func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
