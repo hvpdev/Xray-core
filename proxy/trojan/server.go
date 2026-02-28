@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -245,6 +246,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	})
 
 	errors.LogInfo(ctx, "received request for ", destination)
+	ulog.LogConnection(ctx, destination, conn)
 	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher)
 }
 
