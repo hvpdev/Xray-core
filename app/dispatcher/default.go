@@ -204,6 +204,10 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 			limiter := d.getOrCreateLimiter(user.Email, rate.Limit(user.RateLimit), burst)
 			inboundLink.Writer = &RateLimitWriter{Writer: inboundLink.Writer, Limiter: limiter}
 			outboundLink.Writer = &RateLimitWriter{Writer: outboundLink.Writer, Limiter: limiter}
+			// Disable splice so data flows through RateLimitWriter
+			if sessionInbound != nil {
+				sessionInbound.CanSpliceCopy = 3
+			}
 		} else {
 			d.rateLimiters.Delete(user.Email)
 		}
