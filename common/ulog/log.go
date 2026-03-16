@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -30,8 +29,9 @@ const (
 )
 
 var (
-	logFile = logFileBase + ".log"
-	curFile = filepath.Join(logDir, logFile)
+	logFile              = logFileBase + ".log"
+	curFile              = filepath.Join(logDir, logFile)
+	ForceRotateChan = make(chan bool, 16)
 )
 
 func LogConnectionRaw(ts time.Time, params ConnectionParams) {
@@ -45,9 +45,9 @@ func LogConnection(ctx context.Context, dest net.Destination, conn stat.Connecti
 type Logger struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	mu     sync.RWMutex
 
 	log       *log.Logger
+	lj        *lumberjack.Logger
 	startTime time.Time
 }
 
@@ -57,23 +57,22 @@ func New(ctx context.Context) *Logger {
 	l := &Logger{
 		ctx:       ctx,
 		cancel:    cancel,
-		log:       log.New(newLumberjackLogger(), "", 0),
 		startTime: getStartTime(),
 	}
+	l.lj = newLumberjackLogger()
+	l.log = log.New(l.lj, "", 0)
+
+	logrus.Debugf("[xray-conn] Logger created with start time: %s", l.startTime)
 	l.runRotationLoop()
 	return l
 }
 
 // Close closes the logger and stops the daily rotation loop.
-//
-// If you want to use custom logger instead of global variable,
-// you must to call this function to stop the daily rotation loop.
 func (l *Logger) Close() {
 	l.cancel()
 }
 
 func (l *Logger) LogConnectionRaw(ts time.Time, params ConnectionParams) {
-	l.mu.RLock()
 	if params.DstName != "" {
 		l.log.Printf("T=%s S=%s SP=%d D=%s DP=%d N=%s P=%s U=%s",
 			ts.Format("01-02:15:04:05"), params.SrcIP, params.SrcPort, params.DstIP,
@@ -83,7 +82,6 @@ func (l *Logger) LogConnectionRaw(ts time.Time, params ConnectionParams) {
 			ts.Format("01-02:15:04:05"), params.SrcIP, params.SrcPort, params.DstIP,
 			params.DstPort, params.Protocol, params.UUID)
 	}
-	l.mu.RUnlock()
 }
 
 func (l *Logger) LogConnection(ctx context.Context, dest net.Destination, conn stat.Connection) {
@@ -148,12 +146,16 @@ func (l *Logger) LogConnection(ctx context.Context, dest net.Destination, conn s
 
 func (l *Logger) runRotationLoop() {
 	go func() {
+		timer := time.NewTimer(l.calcRotationSleepTime())
+		defer timer.Stop()
 		for {
 			select {
 			case <-l.ctx.Done():
 				return
-			case <-time.After(time.Minute):
-				time.Sleep(l.calcRotationSleepTime())
+			case <-timer.C:
+				l.rotate()
+				timer.Reset(l.calcRotationSleepTime())
+			case <-ForceRotateChan:
 				l.rotate()
 			}
 		}
@@ -161,45 +163,44 @@ func (l *Logger) runRotationLoop() {
 }
 
 func (l *Logger) calcRotationSleepTime() time.Duration {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	return 24*time.Hour - time.Since(l.startTime)
+	return time.Minute + 24*time.Hour - time.Since(l.startTime)
 }
 
 func (l *Logger) rotate() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
+	defer l.lj.Close()
 	l.startTime = time.Now()
-	l.log.Writer().(*lumberjack.Logger).Close()
 
+	gzpath := func(idx int) string {
+		return filepath.Join(logDir, fmt.Sprintf("%s.%d.gz", logFileBase, idx))
+	}
 	// Remove oldest file
-	os.Remove(filepath.Join(logDir, fmt.Sprintf("%s.%d.gz", logFileBase, maxAge-1)))
+	os.Remove(gzpath(maxAge - 1))
 
 	// Rename files
 	for i := maxAge - 2; i > 0; i-- {
-		src := filepath.Join(logDir, fmt.Sprintf("%s.%d.gz", logFileBase, i))
-		dst := filepath.Join(logDir, fmt.Sprintf("%s.%d.gz", logFileBase, i+1))
-		os.Rename(src, dst)
+		os.Rename(gzpath(i), gzpath(i+1))
 	}
-
 	// Compress current file
 	if _, err := os.Stat(curFile); err == nil {
 		cmd := exec.Command("gzip", "-c", curFile)
-		out, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s.1.gz", logFileBase)))
+		out, err := os.Create(gzpath(1))
 		if err != nil {
 			os.Rename(curFile, filepath.Join(logDir, fmt.Sprintf("%s.1.log", logFileBase)))
 		} else {
 			cmd.Stdout = out
-			cmd.Run()
+			err = cmd.Run()
 			out.Close()
-			os.Remove(curFile)
+			if err != nil {
+				logrus.Debugf("[xray-conn] gzip failed: %s", err)
+				os.Remove(gzpath(1))
+			} else {
+				os.Remove(curFile)
+			}
 		}
 	}
-
-	l.log.SetOutput(newLumberjackLogger())
-	logrus.Debug("[wgi-conn] Rotated log file")
+	l.lj = newLumberjackLogger()
+	l.log.SetOutput(l.lj)
+	logrus.Debug("[xray-conn] Rotated log file")
 }
 
 type ConnectionParams struct {
@@ -249,6 +250,9 @@ func parseLogTime(line string) *time.Time {
 			now := time.Now()
 			t = time.Date(now.Year(), t.Month(), t.Day(), t.Hour(),
 				t.Minute(), t.Second(), 0, time.Local)
+			if t.After(now) {
+				t = t.AddDate(-1, 0, 0)
+			}
 			return &t
 		}
 	}
