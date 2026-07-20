@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
@@ -173,6 +174,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		}
 	}
 	errors.LogInfo(ctx, "received request for ", meta.Target)
+	ulog.LogConnection(ctx, meta.Target, nil)
 	{
 		msg := &log.AccessMessage{
 			To:     meta.Target,

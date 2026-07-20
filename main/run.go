@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	clog "github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/main/commands/base"
 )
@@ -105,8 +106,15 @@ func executeRun(cmd *base.Command, args []string) {
 
 	{
 		osSignals := make(chan os.Signal, 1)
-		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
-		<-osSignals
+		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM, syscall.SIGUSR2)
+		for {
+			switch <-osSignals {
+			case syscall.SIGUSR2:
+				ulog.ForceRotateChan <- true
+			default:
+				return
+			}
+		}
 	}
 }
 

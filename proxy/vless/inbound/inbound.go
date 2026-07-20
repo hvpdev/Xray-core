@@ -26,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/ulog"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
@@ -536,6 +537,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.Name = "vless"
 	inbound.User = request.User
 	inbound.VlessRoute = net.PortFromBytes(userSentID[6:8])
+
+	ulog.LogConnection(ctx, request.Destination(), connection)
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
