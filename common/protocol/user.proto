@@ -16,4 +16,9 @@ message User {
   // Protocol specific account information. Must be the account proto in one of
   // the proxies.
   xray.common.serial.TypedMessage account = 3;
+
+  // Rate limit in bytes per second. 0 means no limit.
+  uint64 rate_limit = 4;
+  // Rate burst in bytes. 0 means default (= rate_limit).
+  uint64 rate_burst = 5;
 }

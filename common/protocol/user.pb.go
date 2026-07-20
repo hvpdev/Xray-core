@@ -29,7 +29,11 @@ type User struct {
 	Email string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
 	// Protocol specific account information. Must be the account proto in one of
 	// the proxies.
-	Account       *serial.TypedMessage `protobuf:"bytes,3,opt,name=account,proto3" json:"account,omitempty"`
+	Account *serial.TypedMessage `protobuf:"bytes,3,opt,name=account,proto3" json:"account,omitempty"`
+	// Rate limit in bytes per second. 0 means no limit.
+	RateLimit uint64 `protobuf:"varint,4,opt,name=rate_limit,json=rateLimit,proto3" json:"rate_limit,omitempty"`
+	// Rate burst in bytes. 0 means default (= rate_limit).
+	RateBurst     uint64 `protobuf:"varint,5,opt,name=rate_burst,json=rateBurst,proto3" json:"rate_burst,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,15 +89,33 @@ func (x *User) GetAccount() *serial.TypedMessage {
 	return nil
 }
 
+func (x *User) GetRateLimit() uint64 {
+	if x != nil {
+		return x.RateLimit
+	}
+	return 0
+}
+
+func (x *User) GetRateBurst() uint64 {
+	if x != nil {
+		return x.RateBurst
+	}
+	return 0
+}
+
 var File_common_protocol_user_proto protoreflect.FileDescriptor
 
 const file_common_protocol_user_proto_rawDesc = "" +
 	"\n" +
-	"\x1acommon/protocol/user.proto\x12\x14xray.common.protocol\x1a!common/serial/typed_message.proto\"n\n" +
+	"\x1acommon/protocol/user.proto\x12\x14xray.common.protocol\x1a!common/serial/typed_message.proto\"\xac\x01\n" +
 	"\x04User\x12\x14\n" +
 	"\x05level\x18\x01 \x01(\rR\x05level\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12:\n" +
-	"\aaccount\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\aaccountB^\n" +
+	"\aaccount\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\aaccount\x12\x1d\n" +
+	"\n" +
+	"rate_limit\x18\x04 \x01(\x04R\trateLimit\x12\x1d\n" +
+	"\n" +
+	"rate_burst\x18\x05 \x01(\x04R\trateBurstB^\n" +
 	"\x18com.xray.common.protocolP\x01Z)github.com/xtls/xray-core/common/protocol\xaa\x02\x14Xray.Common.Protocolb\x06proto3"
 
 var (

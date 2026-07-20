@@ -23,7 +23,38 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
+	"golang.org/x/time/rate"
 )
+
+// rateLimiters maps user email to *rate.Limiter, shared by getLink and WrapLink.
+var rateLimiters sync.Map
+
+func getOrCreateLimiter(email string, limit rate.Limit, burst int) *rate.Limiter {
+	if v, ok := rateLimiters.Load(email); ok {
+		l := v.(*rate.Limiter)
+		if l.Limit() != limit || l.Burst() != burst {
+			l.SetLimit(limit)
+			l.SetBurst(burst)
+		}
+		return l
+	}
+	l := rate.NewLimiter(limit, burst)
+	actual, _ := rateLimiters.LoadOrStore(email, l)
+	return actual.(*rate.Limiter)
+}
+
+// userRateLimiter returns the limiter for the user, or nil if the user has no rate limit.
+func userRateLimiter(user *protocol.MemoryUser) *rate.Limiter {
+	if user.RateLimit == 0 {
+		rateLimiters.Delete(user.Email)
+		return nil
+	}
+	burst := int(user.RateBurst)
+	if burst == 0 {
+		burst = int(user.RateLimit)
+	}
+	return getOrCreateLimiter(user.Email, rate.Limit(user.RateLimit), burst)
+}
 
 var errSniffingTimeout = errors.New("timeout on sniffing")
 
@@ -188,6 +219,13 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 				context.AfterFunc(ctx, func() { om.RemoveIP(userIP) })
 			}
 		}
+
+		if limiter := userRateLimiter(user); limiter != nil {
+			inboundLink.Writer = &RateLimitWriter{Writer: inboundLink.Writer, Limiter: limiter}
+			outboundLink.Writer = &RateLimitWriter{Writer: outboundLink.Writer, Limiter: limiter}
+			// Disable splice so data flows through RateLimitWriter
+			sessionInbound.CanSpliceCopy = 3
+		}
 	}
 
 	return inboundLink, outboundLink
@@ -226,6 +264,12 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 				om.AddIP(userIP)
 				context.AfterFunc(ctx, func() { om.RemoveIP(userIP) })
 			}
+		}
+
+		if limiter := userRateLimiter(user); limiter != nil {
+			link.Writer = &RateLimitWriter{Writer: link.Writer, Limiter: limiter}
+			// Disable splice so data flows through RateLimitWriter
+			sessionInbound.CanSpliceCopy = 3
 		}
 	}
 
