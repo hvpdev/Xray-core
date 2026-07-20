@@ -543,6 +543,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 		return
 	}
 
+	disableLog := false
 	ob.Tag = handler.Tag()
 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
 		if tag := handler.Tag(); tag != "" {
@@ -554,9 +555,13 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				accessMessage.Detour = inTag + " -> " + tag
 			} else {
 				accessMessage.Detour = inTag + " >> " + tag
+				disableLog = true
 			}
 		}
-		log.Record(accessMessage)
+
+		if !disableLog {
+			log.Record(accessMessage)
+		}
 	}
 
 	handler.Dispatch(ctx, link)
